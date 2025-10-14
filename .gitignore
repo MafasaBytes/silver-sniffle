@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Data files
+data/raw_data/
+data/processed/
+*.npy
+*.csv
+*.mp4
+*.avi
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.pb
+
+# Logs
+*.log
+outputs/
+nul
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+
+# Temporary files
+extraction_output.log
+feature-extraction-env.sh
