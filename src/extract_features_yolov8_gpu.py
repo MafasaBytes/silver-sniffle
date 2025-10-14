@@ -2,7 +2,7 @@
 GPU-Accelerated Feature Extraction for RWTH-PHOENIX Dataset
 Uses YOLOv8-Pose with batch processing for maximum GPU utilization
 
-Key optimizations:
+Key:
 - Multi-GPU parallel processing
 - Batch processing (8-16 frames at once)
 - Efficient GPU memory management
@@ -33,9 +33,17 @@ from queue import Empty
 import signal
 warnings.filterwarnings('ignore')
 
-# Disable fancy terminal output for better compatibility
-os.environ['TERM'] = 'dumb'
+# Enable Windows console compatibility
 os.environ['PYTHONUNBUFFERED'] = '1'
+
+os.environ['GLOG_minloglevel'] = '2'  # Suppress MediaPipe C++ warnings
+
+# Initialize colorama for Windows terminal support
+try:
+    import colorama
+    colorama.init()
+except ImportError:
+    pass  # colorama not required, tqdm will fallback
 
 # Get project root
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -182,10 +190,11 @@ class YOLOv8Extractor:
             self.logger.info("Initializing MediaPipe Hands (CPU)...")
             self.mp_hands = mp.solutions.hands
             self.hands = self.mp_hands.Hands(
-                static_image_mode=True,
+                static_image_mode=False,  # False for video sequences
                 max_num_hands=2,
                 min_detection_confidence=0.3,  # Lower threshold for better detection
-                min_tracking_confidence=0.3
+                min_tracking_confidence=0.3,
+                model_complexity=1  # Balance between speed and accuracy
             )
             self.logger.info("MediaPipe Hands ready")
 
@@ -364,7 +373,7 @@ class YOLOv8Extractor:
         start_time = time.time()
         failed_samples = []
 
-        # Progress bar with better terminal handling
+        # Progress bar with Windows compatibility
         use_tqdm = False
         try:
             pbar = tqdm(
@@ -372,8 +381,9 @@ class YOLOv8Extractor:
                 desc=f"[{split.upper()}]",
                 unit="seq",
                 ncols=120,
-                file=None,  # Use default stdout
-                dynamic_ncols=True  # Adapt to terminal width
+                file=sys.stdout,  # Explicit stdout for Windows
+                dynamic_ncols=True,  # Adapt to terminal width
+                ascii=True if sys.platform == 'win32' else False  # ASCII for Windows cmd
             )
             use_tqdm = True
         except Exception as e:
@@ -835,13 +845,15 @@ class ParallelYOLOv8Extractor:
         feeder_thread = threading.Thread(target=feed_tasks, daemon=True)
         feeder_thread.start()
         
-        # Progress bar
+        # Progress bar with Windows compatibility
         pbar = tqdm(
             total=remaining,
             desc=f"Extracting {split}",
             unit="video",
             ncols=120,
-            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
+            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]',
+            file=sys.stdout,  # Explicit stdout for Windows
+            ascii=True if sys.platform == 'win32' else False  # ASCII for Windows cmd
         )
         
         # Main collection loop
