@@ -14,9 +14,10 @@ from typing import Dict, List, Tuple, Optional
 
 class PhoenixFeatureDataset(Dataset):
     """
-    Dataset for pre-extracted MediaPipe features from RWTH-PHOENIX-Weather 2014.
+    Dataset for pre-extracted features from RWTH-PHOENIX-Weather 2014.
 
-    Features are loaded from .npy files with shape (num_frames, 1662).
+    Features are loaded from .npy files with shape (num_frames, 177).
+    Features combine YOLOv8-Pose (51 body keypoints) and MediaPipe Hands (126 hand landmarks).
     """
 
     def __init__(
@@ -144,7 +145,7 @@ class PhoenixFeatureDataset(Dataset):
 
         Returns:
             Dictionary containing:
-                - features: Tensor of shape (seq_len, 1662)
+                - features: Tensor of shape (seq_len, 177)
                 - target: Tensor of shape (target_len,) with encoded annotation
                 - feature_length: Scalar tensor with sequence length
                 - target_length: Scalar tensor with target length
@@ -153,7 +154,7 @@ class PhoenixFeatureDataset(Dataset):
         sample = self.samples[idx]
 
         # Load features
-        features = np.load(sample['feature_file'])  # Shape: (seq_len, 1662)
+        features = np.load(sample['feature_file'])  # Shape: (seq_len, 177)
 
         # Truncate if needed
         if self.max_sequence_length and features.shape[0] > self.max_sequence_length:
@@ -208,7 +209,7 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
     signers = [sample['signer'] for sample in batch]
 
     return {
-        'features': features_padded,          # (batch, max_seq_len, 1662)
+        'features': features_padded,          # (batch, max_seq_len, 177)
         'targets': targets_padded,            # (batch, max_target_len)
         'feature_lengths': feature_lengths,   # (batch,)
         'target_lengths': target_lengths,     # (batch,)
