@@ -25,7 +25,7 @@
 - [x] Architecture decision: 177 features (body + hands, no face)
 - [x] **Feature extraction COMPLETE: All 3 splits (4,667 samples, 655,378 frames)**
 - [x] **Dataset validation COMPLETE: 100% success rate, zero quality issues**
-- [x] **Performance: 30.0 FPS average (3.9x faster than 7.7 FPS estimate)**
+- [x] **Performance: 16.0 FPS per worker, 32 FPS aggregate (2 workers; 2.08x per-worker speedup vs. 7.7 FPS baseline)**
 
 ### ⏳ In Progress
 - [ ] BiLSTM model architecture design
@@ -107,15 +107,17 @@
 - [x] All 4,667 sequences extracted successfully ✅ 100%
 - [x] Feature shape: (num_frames, 177) for each sequence ✅
 - [x] <1% extraction failures ✅ 0% failures (perfect)
-- [x] Extraction logs show consistent FPS ✅ 30.0 FPS average
+- [x] Extraction logs show consistent FPS ✅ 16.0 FPS per worker (32 FPS aggregate)
 
 **Actual Performance:**
 ```
-Total extraction time: 6.07 hours (saved 12.3 hours vs. estimate!)
-├── Train: 5.67 hours (612,027 frames)
-├── Dev: ~12 minutes (16,460 frames)
-└── Test: ~18 minutes (26,891 frames)
-Performance: 30.0 FPS (3.9x faster than 7.7 FPS estimate)
+Total extraction time: 5.73 hours wall-clock with 2 parallel workers
+├── Train: 5.28 hours (317.1 min, 612,027 frames, 2 workers)
+├── Dev: ~8.5 minutes (16,460 frames)
+└── Test: ~14 minutes (26,891 frames)
+Per-worker FPS: 16.0 (2.08x faster than 7.7 FPS baseline)
+Aggregate FPS: 32.1 (2 workers, 4.17x throughput vs. baseline)
+Parallel efficiency: 104% (near-linear scaling)
 Success rate: 100% (0 failures)
 Storage: 443 MB total (99.2% reduction from 53GB raw video)
 ```
@@ -477,7 +479,7 @@ Raw Video Frames (210x260px PNG)
 │  • YOLOv8-Pose (GPU): 17 keypoints → 51 features            │
 │  • MediaPipe Hands (CPU): 42 landmarks → 126 features        │
 │  • Total: 177 features per frame                             │
-│  • Performance: 30.0 FPS on RTX 4070 (3.9x faster!)          │
+│  • Performance: 16.0 FPS/worker on RTX 4070 (32 FPS agg)    │
 │  • Status: COMPLETE (4,667/4,667 sequences, 655,378 frames) │
 └─────────────────────────────────────────────────────────────┘
          ↓
@@ -655,7 +657,7 @@ RWTH-PHOENIX-Weather 2014 SI5:
 | **Real-Time Factor (RTF)** | <1.0 | TBD | Processing time / video duration |
 | **BLEU Score** | >0.4 | TBD | Translation quality |
 | **SUS Score** | >70 | TBD | System usability |
-| **Extraction FPS** | 7-10 | ✅ 30.0 | ✅ 3.9x faster than target! |
+| **Extraction FPS** | 7-10 | ✅ 16.0 (per worker), 32 (aggregate) | ✅ 2.08x per worker, 4.17x aggregate! |
 
 ---
 

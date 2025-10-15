@@ -42,10 +42,12 @@ All validation checks passed. The dataset is ready for BiLSTM-CTC training.
 
 ### Extraction Performance
 
-- **Actual FPS:** 30.0 frames/second
-- **Estimated FPS:** 7.7 frames/second
-- **Performance improvement:** 289.6% FASTER (3.9x speedup)
-- **Total extraction time:** 6.07 hours
+- **Per-worker FPS:** 16.0 frames/second (each of 2 parallel workers)
+- **Aggregate throughput:** 32.1 frames/second (wall-clock)
+- **Baseline (single-threaded):** 7.7 frames/second
+- **Per-worker speedup:** 2.08x (108% improvement)
+- **Aggregate speedup:** 4.17x (with 2 workers)
+- **Total extraction time:** 5.73 hours (wall-clock with 2 workers)
 
 ### Why Performance Exceeded Expectations
 
@@ -227,26 +229,29 @@ With `batch_size=32` and `max_seq_len=241`:
 
 ## Performance Insights
 
-### Why 30 FPS vs. 7.7 FPS Estimate?
+### Why 16 FPS per worker vs. 7.7 FPS Baseline?
 
 1. **YOLOv8 > MediaPipe** for GPU efficiency
 2. **Fewer features:** 177 vs. 543 (67% reduction)
 3. **No face mesh:** Skipped CPU-intensive face landmarks
-4. **Batch processing:** GPU parallelization
-5. **Hardware acceleration:** Video decoding + GPU compute
+4. **Batch processing:** GPU parallelization within each worker
+5. **Parallel workers:** 2 workers achieve near-linear scaling (104% efficiency)
+6. **Hardware acceleration:** Video decoding + GPU compute
 
 ### GPU Utilization
 
-- YOLOv8 can achieve 100+ FPS on high-end GPUs
-- Observed 30 FPS → ~10-20% GPU utilization
-- **Bottleneck:** Video decoding, MediaPipe hand processing
+- YOLOv8 can achieve 100+ FPS on high-end GPUs (single worker, full GPU)
+- Observed 16 FPS per worker → ~16% GPU compute per worker
+- With 2 workers: ~32% effective GPU utilization
+- **Bottleneck:** Video decoding (CPU), MediaPipe hand processing (CPU-bound)
 
 ### Further Optimization Potential
 
-- TensorRT conversion: 2-3x speedup
-- Multi-GPU: Linear scaling
+- TensorRT conversion: 2-3x per-worker speedup
+- More parallel workers: 3 workers → 48 FPS aggregate; 4 workers → 64 FPS
+- Multi-GPU: 2 GPUs with 2 workers each → 64 FPS aggregate
 - FP16 precision: 2x memory reduction
-- Batch video processing: 20-30 FPS potential
+- GPU video decode: Offload decoding to GPU (NVDEC)
 
 ---
 

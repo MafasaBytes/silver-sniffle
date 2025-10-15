@@ -37,36 +37,53 @@ def analyze_performance():
     print("-"*80)
     print()
 
-    # User reported metrics
+    # Actual measured metrics from extraction logs
     train_samples = results['splits']['train']['actual_samples']
     train_frames = results['splits']['train']['total_frames']
-    train_duration_minutes = 5 * 60 + 40  # 5h 40min
+
+    # IMPORTANT: Use actual measured time from extraction logs
+    # Train split was extracted using 2 parallel workers
+    # Actual time measured: 317.1 minutes (5h 17min) from VALIDATION_REPORT.md
+    # Note: The total wall-clock time was 5h 40min, but this includes overhead
+    train_duration_minutes = 317.1  # Actual measured time with 2 workers
+    num_workers = 2  # Parallel extraction used 2 workers
     train_duration_seconds = train_duration_minutes * 60
 
-    # Calculate actual FPS
-    actual_fps = train_frames / train_duration_seconds
+    # Calculate FPS metrics
+    # Per-worker FPS: how fast each worker processes frames
+    per_worker_fps = train_frames / train_duration_seconds / num_workers
 
-    # Original estimate
+    # Aggregate throughput: total frames processed per second (both workers combined)
+    aggregate_fps = train_frames / train_duration_seconds
+
+    # Original single-threaded estimate
     estimated_fps = 7.7
 
-    # Performance improvement
-    fps_improvement = (actual_fps / estimated_fps) - 1
+    # Performance improvement (per worker)
+    fps_improvement_per_worker = (per_worker_fps / estimated_fps) - 1
+
+    # Parallel speedup
+    parallel_speedup = aggregate_fps / estimated_fps
 
     print("1. TRAIN SPLIT EXTRACTION (Completed)")
     print(f"   Samples processed: {train_samples:,}")
     print(f"   Frames processed: {train_frames:,}")
-    print(f"   Duration: 5h 40min ({train_duration_seconds:,} seconds)")
-    print(f"   Actual FPS: {actual_fps:.2f} frames/second")
-    print(f"   Estimated FPS: {estimated_fps:.1f} frames/second")
-    print(f"   Performance: {fps_improvement*100:.1f}% FASTER than estimate")
+    print(f"   Duration: {train_duration_minutes/60:.2f} hours ({train_duration_seconds:,} seconds)")
+    print(f"   Parallel workers: {num_workers}")
+    print(f"   Per-worker FPS: {per_worker_fps:.1f} frames/second")
+    print(f"   Aggregate throughput: {aggregate_fps:.1f} frames/second")
+    print(f"   Baseline estimate: {estimated_fps:.1f} frames/second (single-threaded)")
+    print(f"   Per-worker improvement: {fps_improvement_per_worker*100:.1f}% faster than baseline")
+    print(f"   Parallel speedup: {parallel_speedup:.2f}x (vs single-threaded baseline)")
     print()
 
-    # Estimate dev/test extraction time
+    # Estimate dev/test extraction time based on aggregate throughput
     dev_frames = results['splits']['dev']['total_frames']
     test_frames = results['splits']['test']['total_frames']
 
-    dev_duration_seconds = dev_frames / actual_fps
-    test_duration_seconds = test_frames / actual_fps
+    # Use aggregate throughput for wall-clock time estimates
+    dev_duration_seconds = dev_frames / aggregate_fps
+    test_duration_seconds = test_frames / aggregate_fps
 
     dev_duration_minutes = dev_duration_seconds / 60
     test_duration_minutes = test_duration_seconds / 60
@@ -75,12 +92,14 @@ def analyze_performance():
     print(f"   Samples: {results['splits']['dev']['actual_samples']:,}")
     print(f"   Frames: {dev_frames:,}")
     print(f"   Estimated duration: {dev_duration_minutes:.1f} minutes ({dev_duration_minutes/60:.2f} hours)")
+    print(f"   (Based on {aggregate_fps:.1f} FPS aggregate throughput with {num_workers} workers)")
     print()
 
     print("3. TEST SPLIT EXTRACTION (Estimated)")
     print(f"   Samples: {results['splits']['test']['actual_samples']:,}")
     print(f"   Frames: {test_frames:,}")
     print(f"   Estimated duration: {test_duration_minutes:.1f} minutes ({test_duration_minutes/60:.2f} hours)")
+    print(f"   (Based on {aggregate_fps:.1f} FPS aggregate throughput with {num_workers} workers)")
     print()
 
     # Total time
@@ -90,7 +109,8 @@ def analyze_performance():
     print("4. TOTAL EXTRACTION TIME")
     print(f"   Total frames: {total_frames:,}")
     print(f"   Total duration: {total_duration_hours:.2f} hours ({total_duration_hours/24:.2f} days)")
-    print(f"   Average FPS: {actual_fps:.2f}")
+    print(f"   Per-worker FPS: {per_worker_fps:.1f}")
+    print(f"   Aggregate throughput: {aggregate_fps:.1f} FPS ({num_workers} workers)")
     print()
 
     # Performance analysis
@@ -164,19 +184,21 @@ def analyze_performance():
     samples_per_minute = samples_per_hour / 60
 
     print(f"Processing throughput:")
-    print(f"  - {actual_fps:.2f} frames/second")
+    print(f"  - Per-worker: {per_worker_fps:.1f} frames/second")
+    print(f"  - Aggregate ({num_workers} workers): {aggregate_fps:.1f} frames/second")
     print(f"  - {samples_per_minute:.2f} samples/minute")
     print(f"  - {samples_per_hour:.1f} samples/hour")
     print()
 
     # GPU utilization estimate
-    # Assuming RTX 3060/3070 class GPU
+    # Note: With parallel processing, each worker gets partial GPU resources
     print("Estimated GPU Utilization:")
-    print("  Based on {:.2f} FPS with YOLOv8-Pose + MediaPipe Hands:".format(actual_fps))
-    print("  - YOLOv8 can achieve 100+ FPS on high-end GPUs")
-    print("  - Observed {:.2f} FPS suggests 10-20% GPU utilization".format(actual_fps))
-    print("  - Bottleneck likely: Video decoding, MediaPipe hand processing")
-    print("  - Further optimization potential: Batch processing, multi-GPU")
+    print(f"  Based on {per_worker_fps:.1f} FPS per worker with YOLOv8-Pose + MediaPipe Hands:")
+    print("  - YOLOv8 can achieve 100+ FPS on high-end GPUs (single worker, full GPU)")
+    print(f"  - Observed {per_worker_fps:.1f} FPS per worker suggests ~16% GPU compute per worker")
+    print(f"  - With {num_workers} parallel workers: ~{per_worker_fps*num_workers/100*100:.0f}% effective GPU utilization")
+    print("  - Bottleneck likely: Video decoding (CPU), MediaPipe hand processing (CPU)")
+    print("  - Further optimization potential: More workers, GPU-accelerated video decode")
     print()
 
     print("="*80)
@@ -184,14 +206,15 @@ def analyze_performance():
     print("="*80)
     print()
 
-    print("1. Batch Processing:")
-    print("   - Process multiple videos in parallel (if GPU memory allows)")
-    print("   - Could achieve 20-30 FPS with optimal batching")
+    print("1. Increase Parallel Workers:")
+    print("   - Current: 2 workers achieving 32 FPS aggregate throughput")
+    print("   - With 3 workers: ~48 FPS aggregate throughput (estimated)")
+    print("   - With 4 workers: ~64 FPS aggregate (if GPU memory permits)")
     print()
 
     print("2. Multi-GPU Scaling:")
     print("   - Linear scaling with multiple GPUs")
-    print("   - 2 GPUs = 2x throughput = ~32 FPS")
+    print("   - 2 GPUs with 2 workers each = 4x throughput = ~64 FPS aggregate")
     print()
 
     print("3. Model Optimization:")
