@@ -15,6 +15,7 @@ import numpy as np
 
 from models.bilstm import create_bilstm_model
 from phoenix_dataset import create_dataloaders
+from utils.paths import get_project_root
 
 
 class CTCTrainer:
@@ -180,6 +181,13 @@ class CTCTrainer:
 
             # Forward pass
             log_probs, output_lengths = self.model(features, feature_lengths)
+
+            # Validation: Ensure output_length >= target_length for CTC
+            assert (output_lengths >= target_lengths).all(), \
+                f"CTC requires output_length >= target_length! Output: {output_lengths.tolist()}, Target: {target_lengths.tolist()}"
+
+            # Validation: Check for valid log probabilities
+            assert torch.isfinite(log_probs).all(), "Non-finite log probabilities detected!"
 
             # CTC loss
             loss = self.criterion(
@@ -448,19 +456,23 @@ class CTCTrainer:
 
 
 def main():
+    # Get project root for default paths
+    project_root = get_project_root()
+
     parser = argparse.ArgumentParser(description='Train BiLSTM-CTC baseline')
 
     # Model architecture
-    parser.add_argument('--input-dim', type=int, default=177)
+    parser.add_argument('--input-dim', type=int, default=333)
     parser.add_argument('--hidden-dim', type=int, default=256)
     parser.add_argument('--num-layers', type=int, default=2)
     parser.add_argument('--vocab-size', type=int, default=1120)
     parser.add_argument('--dropout', type=float, default=0.3)
 
-    # Data
+    # Data (use absolute paths by default)
     parser.add_argument('--data-root', type=str,
-                        default='data/raw_data/phoenix-2014-signerindependent-SI5')
-    parser.add_argument('--features-root', type=str, default='data/processed')
+                        default=str(project_root / 'data' / 'raw_data' / 'phoenix-2014-signerindependent-SI5'))
+    parser.add_argument('--features-root', type=str,
+                        default=str(project_root / 'data' / 'processed_holistic'))
     parser.add_argument('--max-sequence-length', type=int, default=241)
 
     # Training
@@ -477,11 +489,11 @@ def main():
     # Early stopping
     parser.add_argument('--early-stop-patience', type=int, default=5)
 
-    # Checkpointing
+    # Checkpointing (use absolute paths by default)
     parser.add_argument('--checkpoint-dir', type=str,
-                        default='models/bilstm_baseline')
+                        default=str(project_root / 'models' / 'bilstm_baseline'))
     parser.add_argument('--log-dir', type=str,
-                        default='logs/bilstm_baseline')
+                        default=str(project_root / 'logs' / 'bilstm_baseline'))
     parser.add_argument('--save-every', type=int, default=5)
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to checkpoint to resume from')

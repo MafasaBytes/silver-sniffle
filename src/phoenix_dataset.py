@@ -11,21 +11,24 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
+from utils.paths import resolve_path, validate_path
+
 
 class PhoenixFeatureDataset(Dataset):
     """
     Dataset for pre-extracted features from RWTH-PHOENIX-Weather 2014.
 
-    Features are loaded from .npy files with shape (num_frames, 177).
-    Features combine YOLOv8-Pose (51 body keypoints) and MediaPipe Hands (126 hand landmarks).
+    Features are loaded from .npy files with shape (num_frames, 333).
+    Features combine MediaPipe Holistic: body (51) + face (156) + hands (126).
     """
 
     def __init__(
         self,
         data_root: str = "data/raw_data/phoenix-2014-signerindependent-SI5",
-        features_root: str = "data/processed",
+        features_root: str = "data/processed_holistic",
         split: str = "train",
         max_sequence_length: Optional[int] = None,
+        use_normalized: bool = False,
     ):
         """
         Initialize Phoenix dataset.
@@ -35,28 +38,53 @@ class PhoenixFeatureDataset(Dataset):
             features_root: Root directory of pre-extracted features
             split: 'train', 'dev', or 'test'
             max_sequence_length: Maximum sequence length (truncate if longer)
+            use_normalized: Whether to load normalized features (default: False)
         """
-        self.data_root = Path(data_root)
-        self.features_root = Path(features_root) / split
+        # Resolve paths relative to project root
+        self.data_root = resolve_path(data_root)
+        validate_path(self.data_root, must_exist=True, description="Data root")
+
+        # Resolve features root path
+        features_root_resolved = resolve_path(features_root)
+
+        # Use normalized features if available
+        if use_normalized:
+            normalized_dir = features_root_resolved / f"{split}_normalized"
+            if normalized_dir.exists():
+                self.features_root = normalized_dir
+                print(f"Using normalized features from: {normalized_dir}")
+            else:
+                print(f"Warning: Normalized features not found, using original features")
+                self.features_root = features_root_resolved / split
+        else:
+            self.features_root = features_root_resolved / split
+
+        validate_path(self.features_root, must_exist=True, description=f"Features root for {split}")
+
         self.split = split
         self.max_sequence_length = max_sequence_length
 
         # Load annotations
         annotations_file = self.data_root / "annotations" / "manual" / f"{split}.SI5.corpus.csv"
+        validate_path(annotations_file, must_exist=True, description=f"Annotations file for {split}")
         self.annotations_df = pd.read_csv(annotations_file, delimiter="|")
 
         # Build vocabulary from training data
         if split == "train":
-            self.vocab = self._build_vocabulary()
+            self.vocab = self._build_vocabulary(features_root)
         else:
-            # Load vocabulary from training set
-            vocab_file = Path(features_root) / "train" / "vocabulary.txt"
-            if vocab_file.exists():
-                self.vocab = self._load_vocabulary(vocab_file)
+            # Load vocabulary from training set (check both normalized and original locations)
+            vocab_file_normalized = Path(features_root) / "train_normalized" / "vocabulary.txt"
+            vocab_file_original = Path(features_root) / "train" / "vocabulary.txt"
+
+            if vocab_file_normalized.exists():
+                self.vocab = self._load_vocabulary(vocab_file_normalized)
+            elif vocab_file_original.exists():
+                self.vocab = self._load_vocabulary(vocab_file_original)
             else:
                 # If vocabulary doesn't exist yet, build it
                 print(f"Warning: Vocabulary file not found. Building from {split} split.")
-                self.vocab = self._build_vocabulary()
+                self.vocab = self._build_vocabulary(features_root)
 
         # Filter samples where features exist
         self.samples = []
@@ -75,7 +103,7 @@ class PhoenixFeatureDataset(Dataset):
         if len(self.samples) < len(self.annotations_df):
             print(f"Warning: {len(self.annotations_df) - len(self.samples)} samples have missing features")
 
-    def _build_vocabulary(self) -> Dict[str, int]:
+    def _build_vocabulary(self, features_root: str) -> Dict[str, int]:
         """Build vocabulary from annotations."""
         all_signs = set()
         for annotation in self.annotations_df['annotation']:
@@ -145,7 +173,7 @@ class PhoenixFeatureDataset(Dataset):
 
         Returns:
             Dictionary containing:
-                - features: Tensor of shape (seq_len, 177)
+                - features: Tensor of shape (seq_len, 333)
                 - target: Tensor of shape (target_len,) with encoded annotation
                 - feature_length: Scalar tensor with sequence length
                 - target_length: Scalar tensor with target length
@@ -154,7 +182,7 @@ class PhoenixFeatureDataset(Dataset):
         sample = self.samples[idx]
 
         # Load features
-        features = np.load(sample['feature_file'])  # Shape: (seq_len, 177)
+        features = np.load(sample['feature_file'])  # Shape: (seq_len, 333)
 
         # Truncate if needed
         if self.max_sequence_length and features.shape[0] > self.max_sequence_length:
@@ -209,7 +237,7 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
     signers = [sample['signer'] for sample in batch]
 
     return {
-        'features': features_padded,          # (batch, max_seq_len, 177)
+        'features': features_padded,          # (batch, max_seq_len, 333)
         'targets': targets_padded,            # (batch, max_target_len)
         'feature_lengths': feature_lengths,   # (batch,)
         'target_lengths': target_lengths,     # (batch,)
@@ -220,7 +248,7 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
 
 def create_dataloaders(
     data_root: str = "data/raw_data/phoenix-2014-signerindependent-SI5",
-    features_root: str = "data/processed",
+    features_root: str = "data/processed_holistic",
     batch_size: int = 4,
     num_workers: int = 0,
     max_sequence_length: Optional[int] = None,
